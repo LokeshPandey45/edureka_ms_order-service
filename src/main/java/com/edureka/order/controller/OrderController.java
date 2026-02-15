@@ -1,14 +1,13 @@
 package com.edureka.order.controller;
 
-import com.edureka.order.event.OrderPlacedEvent;
 import com.edureka.order.model.Order;
 import com.edureka.order.repository.OrderRepository;
+import com.edureka.order.service.OrderService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
-import org.springframework.kafka.core.KafkaTemplate;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.List;
@@ -26,41 +25,16 @@ public class OrderController {
     private OrderRepository orderRepository;
 
     @Autowired
-    private KafkaTemplate<String, OrderPlacedEvent> kafkaTemplate;
+    private OrderService orderService;
 
     /**
-     * Place a new order. Persists to DB and publishes OrderPlacedEvent to Kafka.
+     * Place a new order. Validates with Product, Customer, Inventory services (sync),
+     * then publishes OrderPlacedEvent to Kafka for Payment and Inventory (async).
      * Returns 201 Created with the created order, or 400 for validation errors.
      */
     @PostMapping(value = {"", "/", "/placeOrder"})
     public ResponseEntity<?> placeOrder(@RequestBody Order order) {
-        if (order == null) {
-            _logger.warn("Order is null");
-            return ResponseEntity.badRequest()
-                    .body(Map.of("error", "Order body is required"));
-        }
-        if (order.getSkuCode() == null || order.getSkuCode().isBlank()) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("error", "Order skuCode is required"));
-        }
-        if (order.getQuantity() == null || order.getQuantity() <= 0) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("error", "Order quantity must be positive"));
-        }
-        if (order.getPrice() != null && order.getPrice().signum() < 0) {
-            return ResponseEntity.badRequest()
-                    .body(Map.of("error", "Order price must be non-negative"));
-        }
-
-        order.setId(order.getId() != null && !order.getId().isBlank() ? order.getId() : UUID.randomUUID().toString());
-        order.setOrderNumber(UUID.randomUUID().toString());
-        Order saved = orderRepository.save(order);
-        _logger.info("Order placed successfully, order number: {}", saved.getOrderNumber());
-
-        kafkaTemplate.send("notificationTopic", new OrderPlacedEvent(saved.getOrderNumber(),
-                saved.getEmail() != null ? saved.getEmail() : "user@example.com"));
-
-        return ResponseEntity.status(HttpStatus.CREATED).body(saved);
+        return orderService.placeOrder(order);
     }
 
     /**
@@ -88,7 +62,7 @@ public class OrderController {
         }
         _logger.info("Getting order with id: {}", id);
         return orderRepository.findById(id)
-                .map(ResponseEntity::ok)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("error", "Order not found for id: " + id)));
     }
@@ -104,7 +78,7 @@ public class OrderController {
         }
         _logger.info("Getting order with order number: {}", orderNumber);
         return orderRepository.findByOrderNumber(orderNumber)
-                .map(ResponseEntity::ok)
+                .<ResponseEntity<?>>map(ResponseEntity::ok)
                 .orElse(ResponseEntity.status(HttpStatus.NOT_FOUND)
                         .body(Map.of("error", "Order not found for order number: " + orderNumber)));
     }
