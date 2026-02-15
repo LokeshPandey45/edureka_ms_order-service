@@ -10,7 +10,7 @@ import org.springframework.web.bind.annotation.PathVariable;
  * Feign client for Product Catalog Service.
  * Proxy pattern for inter-service communication.
  */
-@FeignClient(name = "product_service", path = "/api/products")
+@FeignClient(name = "product-service", path = "/api/products")
 public interface ProductClient {
 
     @GetMapping("/sku/{skuCode}")
