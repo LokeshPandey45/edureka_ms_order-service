@@ -9,6 +9,9 @@ import com.edureka.order.dto.ProductResponse;
 import com.edureka.order.event.OrderPlacedEvent;
 import com.edureka.order.model.Order;
 import com.edureka.order.repository.OrderRepository;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
+import io.github.resilience4j.retry.annotation.Retry;
+import io.github.resilience4j.timelimiter.annotation.TimeLimiter;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
@@ -25,6 +28,7 @@ import java.util.UUID;
  * Order Service - orchestrates order placement with inter-service communication.
  * Uses Feign clients (Proxy pattern) for sync calls to Product, Customer, Inventory.
  * Publishes OrderPlacedEvent to Kafka for async processing by Payment and Inventory.
+ * Enhanced with Resilience4j for Circuit Breaker, Retry, and Timeout patterns.
  */
 @Service
 public class OrderService {
@@ -48,7 +52,12 @@ public class OrderService {
 
     /**
      * Place order after validating with Product, Customer, and Inventory services.
+     * Enhanced with Circuit Breaker, Retry, and Timeout patterns for resilience.
+     * Falls back to graceful error handling when downstream services fail.
      */
+    @CircuitBreaker(name = "orderService", fallbackMethod = "placeOrderFallback")
+    @Retry(name = "orderService")
+    @TimeLimiter(name = "orderService")
     public ResponseEntity<?> placeOrder(Order order) {
         if (order == null) {
             return ResponseEntity.badRequest()
@@ -121,5 +130,45 @@ public class OrderService {
             return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
                     .body(Map.of("error", "Service temporarily unavailable. Please try again."));
         }
+    }
+
+    /**
+     * Fallback method for placeOrder when Circuit Breaker opens or service calls fail.
+     * Provides graceful degradation with meaningful error messages.
+     * 
+     * @param order The order being placed
+     * @param throwable The exception that triggered the fallback
+     * @return ResponseEntity with SERVICE_UNAVAILABLE status and error details
+     */
+    private ResponseEntity<?> placeOrderFallback(Order order, Throwable throwable) {
+        _logger.error("Circuit breaker activated for order placement. Reason: {} - {}", 
+                throwable.getClass().getSimpleName(), throwable.getMessage());
+        
+        String errorMessage = "Order placement service is temporarily unavailable. ";
+        String serviceName = "downstream service";
+        
+        // Determine which service failed based on exception message
+        String exceptionMessage = throwable.getMessage() != null ? throwable.getMessage().toLowerCase() : "";
+        
+        if (exceptionMessage.contains("product")) {
+            serviceName = "Product Service";
+        } else if (exceptionMessage.contains("customer")) {
+            serviceName = "Customer Service";
+        } else if (exceptionMessage.contains("inventory")) {
+            serviceName = "Inventory Service";
+        }
+        
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(Map.of(
+                        "error", errorMessage + "Please try again in a few moments.",
+                        "reason", serviceName + " is currently unavailable",
+                        "timestamp", System.currentTimeMillis(),
+                        "orderInfo", Map.of(
+                                "skuCode", order.getSkuCode() != null ? order.getSkuCode() : "N/A",
+                                "quantity", order.getQuantity() != null ? order.getQuantity() : 0,
+                                "email", order.getEmail() != null ? order.getEmail() : "N/A"
+                        ),
+                        "suggestion", "Our engineering team has been notified. Please retry your order in 30 seconds."
+                ));
     }
 }
