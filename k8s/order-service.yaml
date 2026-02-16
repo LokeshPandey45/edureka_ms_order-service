@@ -1,0 +1,76 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: order-service
+  template:
+    metadata:
+      labels:
+        app: order-service
+    spec:
+      containers:
+        - name: order-service
+          image: vishal101090/order-service:latest
+          imagePullPolicy: IfNotPresent
+          env:
+            - name: SERVER_PORT
+              value: "5004"
+            - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
+              value: "http://discovery-service:5001/eureka/"
+            - name: SPRING_DATA_MONGODB_URI
+              value: "mongodb://mongodb-service:27017/order-db"
+            - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
+              value: "kafka-service:9092"
+          ports:
+            - containerPort: 5004
+          livenessProbe:
+            httpGet:
+              path: /actuator/health/liveness
+              port: 5004
+            initialDelaySeconds: 60
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /actuator/health/readiness
+              port: 5004
+            initialDelaySeconds: 40
+            periodSeconds: 10
+
+---
+
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-service
+spec:
+  selector:
+    app: order-service
+  type: ClusterIP
+  ports:
+    - protocol: TCP
+      port: 5004
+      targetPort: 5004
+
+---
+
+#apiVersion: networking.k8s.io/v1
+#kind: Ingress
+#metadata:
+#  name: order-ingress
+#spec:
+#  ingressClassName: nginx
+#  rules:
+#    - host: order.local
+#      http:
+#        paths:
+#          - path: /
+#            pathType: Prefix
+#            backend:
+#              service:
+#                name: order-service
+#                port:
+#                  number: 5004
