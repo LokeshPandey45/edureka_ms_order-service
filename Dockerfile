@@ -1,7 +1,7 @@
 # Start with a base Java image
 FROM eclipse-temurin:17-jdk
 
-LABEL authors="vishal"
+LABEL authors="Lokesh"
 
 # Set working directory
 WORKDIR /app
@@ -10,7 +10,7 @@ WORKDIR /app
 COPY target/*.jar app.jar
 
 # Expose the port Order Service runs on
-EXPOSE 5004
+EXPOSE 6004
 
 # Installing utilities
 RUN apt-get update

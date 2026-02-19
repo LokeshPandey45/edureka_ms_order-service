@@ -14,29 +14,29 @@ spec:
     spec:
       containers:
         - name: order-service
-          image: vishal101090/order-service:latest
+          image: Lokesh101090/order-service:latest
           imagePullPolicy: IfNotPresent
           env:
             - name: SERVER_PORT
-              value: "5004"
+              value: "6004"
             - name: EUREKA_CLIENT_SERVICEURL_DEFAULTZONE
-              value: "http://discovery-service:5001/eureka/"
+              value: "http://discovery-service:6001/eureka/"
             - name: SPRING_DATA_MONGODB_URI
               value: "mongodb://mongodb-service:27017/order-db"
             - name: SPRING_KAFKA_BOOTSTRAP_SERVERS
               value: "kafka-service:9092"
           ports:
-            - containerPort: 5004
+            - containerPort: 6004
           livenessProbe:
             httpGet:
               path: /actuator/health/liveness
-              port: 5004
+              port: 6004
             initialDelaySeconds: 60
             periodSeconds: 10
           readinessProbe:
             httpGet:
               path: /actuator/health/readiness
-              port: 5004
+              port: 6004
             initialDelaySeconds: 40
             periodSeconds: 10
 
@@ -52,8 +52,8 @@ spec:
   type: LoadBalancer
   ports:
     - protocol: TCP
-      port: 5004
-      targetPort: 5004
+      port: 6004
+      targetPort: 6004
 
 ---
 
